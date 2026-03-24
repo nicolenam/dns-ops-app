@@ -40,6 +40,50 @@ Then open:
 http://localhost:8501
 ```
 
+## Deploy on Streamlit Community Cloud
+
+This app can be deployed directly from GitHub on Streamlit Community Cloud.
+
+Files needed for deployment:
+
+- `app.py` - app entrypoint
+- `requirements.txt` - Python dependencies for the hosted environment
+
+Deployment steps:
+
+1. Push the repository to GitHub.
+2. Go to `https://share.streamlit.io/`.
+3. Click `Create app`.
+4. Select:
+   - Repository: `nicolenam/dns-ops-app`
+   - Branch: `main`
+   - Main file path: `app.py`
+5. In `Advanced settings`, choose a Python version if needed and add secrets.
+6. Click `Deploy`.
+
+Demo mode secrets:
+
+```toml
+DNS_OPS_USE_MOCK_MODE="true"
+```
+
+Live mode secrets:
+
+```toml
+DNS_OPS_USE_MOCK_MODE="false"
+SENDGRID_API_KEY="your-sendgrid-api-key"
+SENDGRID_REGION="global"
+SENDGRID_SUBDOMAIN=""
+DMARC_POLICY="reject"
+DMARC_RUA="example@rep.dmarcanalyzer.com"
+DMARC_RUF="example@for.dmarcanalyzer.com"
+```
+
+Notes:
+
+- This repository currently supports real SendGrid integration in live mode.
+- AWS ACM live integration is not implemented yet, so certificate generation will still fail in live mode.
+
 ## Mock mode vs live mode
 
 The app supports two modes controlled by `DNS_OPS_USE_MOCK_MODE`.
