@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.streamlit/secrets.toml
+backup-nested-dns-ops-app-20260323/
+.DS_Store
