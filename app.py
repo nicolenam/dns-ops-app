@@ -9,7 +9,7 @@ from integrations import (
 
 st.set_page_config(page_title="DNS Ops Helper", layout="wide")
 st.title("DNS Ops Helper")
-st.caption("Build now with placeholders. Later connect real SendGrid and AWS keys.")
+st.caption("Use mock mode for demos or connect real SendGrid and AWS credentials for live records.")
 if use_mock_mode():
     st.info("Mock mode is ON. This app is generating placeholder records only.")
 else:
@@ -45,6 +45,8 @@ DEFAULTS = {
     "cert_cname_name": "",
     "cert_cname_target": "",
     "cert_requested_names": [],
+    "cert_validation_records": [],
+    "cert_status": "",
     "email_draft": "",
     "checklist": "",
     "last_action": "None",
@@ -133,6 +135,83 @@ def get_certificate_subject_text() -> str:
     return secure_hostname or dealer_domain or "[hostname]"
 
 
+def get_certificate_validation_records() -> list[dict[str, str]]:
+    records = []
+
+    for record in st.session_state.cert_validation_records:
+        if not isinstance(record, dict):
+            continue
+
+        record_type = str(record.get("type", "")).strip().upper() or "CNAME"
+        name = str(record.get("name", "")).strip()
+        value = str(record.get("value", "")).strip()
+        if not (name and value):
+            continue
+
+        records.append(
+            {
+                "type": record_type,
+                "name": name,
+                "value": value,
+            }
+        )
+
+    if records:
+        return records
+
+    cert_cname_name = st.session_state.cert_cname_name.strip()
+    cert_cname_target = st.session_state.cert_cname_target.strip()
+    if cert_cname_name and cert_cname_target:
+        return [
+            {
+                "type": "CNAME",
+                "name": cert_cname_name,
+                "value": cert_cname_target,
+            }
+        ]
+
+    return []
+
+
+def format_dns_blocks(records: list[dict[str, str]]) -> str:
+    return "\n\n".join(
+        f"""{record['type']}
+Name: {record['name']}
+Value: {record['value']}"""
+        for record in records
+    )
+
+
+def build_certificate_email_section(heading: str) -> str:
+    records = get_certificate_validation_records()
+    requested_names = [name for name in st.session_state.cert_requested_names if name]
+    cert_status = st.session_state.cert_status.strip()
+
+    lines = [heading]
+
+    if requested_names:
+        lines.append(f"Requested certificate names: {', '.join(requested_names)}")
+
+    if cert_status:
+        lines.append(f"Current certificate status: {cert_status}")
+
+    lines.append("")
+    if records:
+        lines.append(format_dns_blocks(records))
+    elif cert_status == "ISSUED":
+        lines.append(
+            "No additional DNS validation records are needed. AWS ACM currently shows this certificate as ISSUED."
+        )
+    else:
+        lines.append(
+            """CNAME
+Name: [enter certificate cname name]
+Value: [enter certificate cname target]"""
+        )
+
+    return "\n".join(lines)
+
+
 def build_email() -> str:
     dealer_name = st.session_state.dealer_name.strip() or "there"
     domain = st.session_state.dealer_domain.strip().lower() or "[domain]"
@@ -147,9 +226,6 @@ def build_email() -> str:
     dkim2_name = st.session_state.dkim2_name.strip()
     dkim2_target = st.session_state.dkim2_target.strip()
     dmarc_value = st.session_state.dmarc_value.strip()
-    cert_cname_name = st.session_state.cert_cname_name.strip()
-    cert_cname_target = st.session_state.cert_cname_target.strip()
-
     subdomain_target = get_subdomain_target(domain, lb)
     main_records = get_main_domain_records(domain, lb)
     cert_subject_text = get_certificate_subject_text()
@@ -171,10 +247,9 @@ TXT
 Name: _dmarc
 Value: {dmarc_value or "[enter dmarc value]"}"""
 
-    cert_section = f"""2) DNS records to validate our server certificates in prep for site hosting on {cert_subject_text}
-CNAME
-Name: {cert_cname_name or "[enter certificate cname name]"}
-Value: {cert_cname_target or "[enter certificate cname target]"}"""
+    cert_section = build_certificate_email_section(
+        f"2) DNS records to validate our server certificates in prep for site hosting on {cert_subject_text}"
+    )
 
     if workflow == "SendGrid + certificate prep":
         return f"""Hi {dealer_name},
@@ -215,17 +290,16 @@ Once these records have been added, please let us know and we will verify the se
 Thanks,"""
 
     if workflow == "Certificate only":
+        cert_only_section = build_certificate_email_section(
+            f"Here are the DNS records needed to validate our server certificates in prep for site hosting on {cert_subject_text}:"
+        )
         return f"""Hi {dealer_name},
 
-Here is the DNS record needed to validate our server certificates in prep for site hosting on {cert_subject_text}:
+{cert_only_section}
 
-CNAME
-Name: {cert_cname_name or "[enter certificate cname name]"}
-Value: {cert_cname_target or "[enter certificate cname target]"}
+These records can be added right away and do not change where the website is hosted yet.
 
-This record can be added right away and does not change where the website is hosted yet.
-
-Once this record has been added, please let us know and we will complete the remaining setup on our side.
+Once these records have been added, please let us know and we will complete the remaining setup on our side.
 
 Thanks,"""
 
@@ -357,14 +431,20 @@ def build_records_preview() -> str:
 
     if workflow in {"SendGrid + certificate prep", "Certificate only"}:
         cert_rows = [
-            ("CNAME", st.session_state.cert_cname_name, st.session_state.cert_cname_target),
+            (record["type"], record["name"], record["value"])
+            for record in get_certificate_validation_records()
         ]
         requested_names = (
             f"Requested certificate names: {', '.join(st.session_state.cert_requested_names) if st.session_state.cert_requested_names else ''}"
         )
         sections.append("AWS certificate records")
         sections.append(requested_names)
-        sections.append(_format_record_table(cert_rows))
+        if st.session_state.cert_status.strip():
+            sections.append(f"Certificate status: {st.session_state.cert_status.strip()}")
+        if cert_rows:
+            sections.append(_format_record_table(cert_rows))
+        elif st.session_state.cert_status.strip() == "ISSUED":
+            sections.append("No additional DNS validation records are needed.")
 
     if workflow == "Subdomain go-live":
         subdomain_rows = [
@@ -526,6 +606,8 @@ with c1:
                         st.session_state.cert_cname_name = cert["cert_cname_name"]
                         st.session_state.cert_cname_target = cert["cert_cname_target"]
                         st.session_state.cert_requested_names = cert["requested_names"]
+                        st.session_state.cert_validation_records = cert.get("cert_validation_records", [])
+                        st.session_state.cert_status = cert.get("certificate_status", "") or ""
 
                 st.session_state.last_action = "Records generated"
                 st.success("DNS records generated successfully.")

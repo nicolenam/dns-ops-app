@@ -71,6 +71,9 @@ Live mode secrets:
 
 ```toml
 DNS_OPS_USE_MOCK_MODE="false"
+AWS_REGION="us-east-1"
+AWS_ACCESS_KEY_ID="your-aws-access-key-id"
+AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"
 SENDGRID_API_KEY="your-sendgrid-api-key"
 SENDGRID_REGION="global"
 SENDGRID_SUBDOMAIN=""
@@ -81,8 +84,8 @@ DMARC_RUF="example@for.dmarcanalyzer.com"
 
 Notes:
 
-- This repository currently supports real SendGrid integration in live mode.
-- AWS ACM live integration is not implemented yet, so certificate generation will still fail in live mode.
+- This repository supports real SendGrid and AWS ACM integration in live mode.
+- Add `AWS_SESSION_TOKEN` too if you are using temporary AWS credentials.
 
 ## Mock mode vs live mode
 
@@ -136,12 +139,27 @@ Notes:
 
 ### AWS ACM
 
-AWS certificate integration is not implemented yet in live mode.
+`Certificate only` and the AWS portion of `SendGrid + certificate prep` can use AWS Certificate Manager in live mode.
 
-That means:
+Required environment variable:
 
-- `Certificate only` will still fail in live mode
-- `SendGrid + certificate prep` will only be partially live until AWS ACM integration is added
+```bash
+AWS_REGION=us-east-1
+```
+
+AWS credentials can be supplied through the standard `boto3` credential chain. In Streamlit Community Cloud, the simplest option is to set:
+
+```bash
+AWS_ACCESS_KEY_ID=your-aws-access-key-id
+AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
+AWS_SESSION_TOKEN=your-session-token-if-needed
+```
+
+Notes:
+
+- The app requests or reuses DNS-validated ACM certificates and returns the validation CNAME records that need to be added at the DNS provider.
+- Root + wildcard requests can return multiple validation records, and the generated preview/email will show all of them.
+- The app polls briefly for ACM to return validation records after a new request is created.
 
 ## What the UI shows
 

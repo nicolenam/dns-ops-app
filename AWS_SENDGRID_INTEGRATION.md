@@ -1,6 +1,12 @@
 # AWS and SendGrid Integration Outline
 
-This app currently uses mock data in `integrations.py`. The goal of the real integration is to replace those mock responses with live AWS and SendGrid API calls while keeping the Streamlit UI in `app.py` mostly unchanged.
+This document started as the implementation outline for replacing mock data in `integrations.py` with live AWS and SendGrid API calls while keeping the Streamlit UI in `app.py` mostly unchanged.
+
+Current note:
+
+- Live SendGrid and AWS ACM support now exist in `integrations.py`.
+- Mock mode is still available for demos and local UI work.
+- This document remains useful as a design/reference note, but some of the "not implemented yet" sections are historical.
 
 ## What the app already does
 
