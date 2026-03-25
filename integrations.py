@@ -544,17 +544,22 @@ def get_aws_certificate_record(
 
     if use_mock_mode():
         validation_records = []
+        seen_records = set()
         for requested_name in requested_names:
-            suffix = _short_hash(requested_name)
-            validation_records.append(
-                {
-                    "domain_name": requested_name,
-                    "validation_status": "PENDING_VALIDATION",
-                    "name": f"_{suffix}acmvalidation.{requested_name}",
-                    "type": "CNAME",
-                    "value": f"_{suffix}.jkddzztszm.acm-validations.aws.",
-                }
-            )
+            validation_name = requested_name[2:] if requested_name.startswith("*.") else requested_name
+            suffix = _short_hash(validation_name)
+            record = {
+                "domain_name": requested_name,
+                "validation_status": "PENDING_VALIDATION",
+                "name": f"_{suffix}acmvalidation.{validation_name}",
+                "type": "CNAME",
+                "value": f"_{suffix}.jkddzztszm.acm-validations.aws.",
+            }
+            record_key = (record["type"], record["name"], record["value"])
+            if record_key in seen_records:
+                continue
+            seen_records.add(record_key)
+            validation_records.append(record)
 
         first_record = validation_records[0]
         return {

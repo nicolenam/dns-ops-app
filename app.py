@@ -173,6 +173,19 @@ def get_certificate_validation_records() -> list[dict[str, str]]:
     return []
 
 
+def _short_certificate_record_name(name: str, domain_name: str) -> str:
+    display_name = name.strip().rstrip(".")
+    validation_domain = domain_name.strip().lower().rstrip(".")
+    if validation_domain.startswith("*."):
+        validation_domain = validation_domain[2:]
+
+    suffix = f".{validation_domain}"
+    if validation_domain and display_name.lower().endswith(suffix):
+        return display_name[:-len(suffix)]
+
+    return display_name
+
+
 def format_dns_blocks(records: list[dict[str, str]]) -> str:
     return "\n\n".join(
         f"""{record['type']}
@@ -183,17 +196,42 @@ Value: {record['value']}"""
 
 
 def build_certificate_email_section(heading: str) -> str:
-    records = get_certificate_validation_records()
-    requested_names = [name for name in st.session_state.cert_requested_names if name]
+    records = []
+    for record in st.session_state.cert_validation_records:
+        if not isinstance(record, dict):
+            continue
+
+        record_type = str(record.get("type", "")).strip().upper() or "CNAME"
+        name = str(record.get("name", "")).strip()
+        value = str(record.get("value", "")).strip()
+        if not (name and value):
+            continue
+
+        records.append(
+            {
+                "type": record_type,
+                "name": _short_certificate_record_name(
+                    name,
+                    str(record.get("domain_name", "")).strip(),
+                ),
+                "value": value,
+            }
+        )
+
+    if not records:
+        fallback_domain = st.session_state.cert_requested_names[0] if st.session_state.cert_requested_names else ""
+        for record in get_certificate_validation_records():
+            records.append(
+                {
+                    "type": record["type"],
+                    "name": _short_certificate_record_name(record["name"], fallback_domain),
+                    "value": record["value"],
+                }
+            )
+
     cert_status = st.session_state.cert_status.strip()
 
     lines = [heading]
-
-    if requested_names:
-        lines.append(f"Requested certificate names: {', '.join(requested_names)}")
-
-    if cert_status:
-        lines.append(f"Current certificate status: {cert_status}")
 
     lines.append("")
     if records:
@@ -430,17 +468,40 @@ def build_records_preview() -> str:
         sections.append(_format_record_table(sendgrid_rows))
 
     if workflow in {"SendGrid + certificate prep", "Certificate only"}:
-        cert_rows = [
-            (record["type"], record["name"], record["value"])
-            for record in get_certificate_validation_records()
-        ]
-        requested_names = (
-            f"Requested certificate names: {', '.join(st.session_state.cert_requested_names) if st.session_state.cert_requested_names else ''}"
-        )
+        cert_rows = []
+        for record in st.session_state.cert_validation_records:
+            if not isinstance(record, dict):
+                continue
+
+            record_type = str(record.get("type", "")).strip().upper() or "CNAME"
+            name = str(record.get("name", "")).strip()
+            value = str(record.get("value", "")).strip()
+            if not (name and value):
+                continue
+
+            cert_rows.append(
+                (
+                    record_type,
+                    _short_certificate_record_name(
+                        name,
+                        str(record.get("domain_name", "")).strip(),
+                    ),
+                    value,
+                )
+            )
+
+        if not cert_rows:
+            fallback_domain = st.session_state.cert_requested_names[0] if st.session_state.cert_requested_names else ""
+            for record in get_certificate_validation_records():
+                cert_rows.append(
+                    (
+                        record["type"],
+                        _short_certificate_record_name(record["name"], fallback_domain),
+                        record["value"],
+                    )
+                )
+
         sections.append("AWS certificate records")
-        sections.append(requested_names)
-        if st.session_state.cert_status.strip():
-            sections.append(f"Certificate status: {st.session_state.cert_status.strip()}")
         if cert_rows:
             sections.append(_format_record_table(cert_rows))
         elif st.session_state.cert_status.strip() == "ISSUED":
@@ -650,7 +711,7 @@ left, right = st.columns(2)
 
 with left:
     st.subheader("Generated records", anchor=False)
-    st.code(build_records_preview(), language=None, wrap_lines=True, height=420)
+    st.code(build_records_preview(), language=None, wrap_lines=False, height=420)
 
 with right:
     st.subheader("Generated email template", anchor=False)

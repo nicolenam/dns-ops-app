@@ -39,7 +39,7 @@ class FakeACMClient:
 
 
 class AwsCertificateRecordTests(unittest.TestCase):
-    def test_mock_mode_returns_multiple_validation_records_for_root_and_wildcard(self):
+    def test_mock_mode_dedupes_validation_records_for_root_and_wildcard(self):
         with patch.dict(os.environ, {"DNS_OPS_USE_MOCK_MODE": "true"}, clear=False):
             result = integrations.get_aws_certificate_record(
                 dealer_domain="Example.com",
@@ -49,8 +49,9 @@ class AwsCertificateRecordTests(unittest.TestCase):
 
         self.assertEqual(result["requested_names"], ["example.com", "*.example.com"])
         self.assertEqual(result["certificate_status"], "PENDING_VALIDATION")
-        self.assertEqual(len(result["cert_validation_records"]), 2)
+        self.assertEqual(len(result["cert_validation_records"]), 1)
         self.assertEqual(result["cert_cname_name"], result["cert_validation_records"][0]["name"])
+        self.assertNotIn("*.", result["cert_validation_records"][0]["name"])
 
     def test_live_mode_reuses_existing_certificate(self):
         certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/existing"
